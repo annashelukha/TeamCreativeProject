@@ -1,43 +1,34 @@
-/*
-  Main class for running the spreadsheet server through socket connections.
- */
-//socket class
-#include <sys/socket.h>
 #include <iostream>
-#include <netinet/in.h>
-#include <vector>
+#include <boost/asio.hpp>
 
-#define PORT 1100
+using namespace boost::asio;
 
-int main()
-{
-  int server_socket;
-  int opt = 1;
-  std::vector<int> clients;
-  
-  //build address struct to specify server settings
-  struct sockaddr_in address;
-  address.sin_family = AF_INET;
-  address.sin_addr.s_addr = INADDR_ANY;
-  address.sin_port = htons(PORT);
-  
-  //get length of address
-  int addrlen = sizeof(address);
+class server
+ {
+   server(boost::asio::io_service& io_service)
+     : acceptor_(io_service, tcp::endpoint(tcp::v4(), 1100))
+   {
+     start_accept();
+   }
 
-  //create an streaming, IPv4 socket
-  server_socket = socket(AF_INET, SOCK_STREAM, 0);
-  //set options to remember the port and address
-  setsockopt(server_socket, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)); 
-  setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)); 
-  bind(server_socket, (struct sockaddr *)&address, sizeof(address));
+   void start_accept()
+   {
+     tcp_connection::pointer new_connection =
+       tcp_connection::create(acceptor_.get_io_service());
 
-  //begin listening
-  listen(server_socket, 5);
-  
-  //accept incoming client
-  int client_socket = accept(server_socket, (struct sockaddr *)&address, (socklen_t*)&addrlen);
+     acceptor_.async_accept(new_connection->socket(),
+			    boost::bind(&tcp_server::handle_accept, this, new_connection,
+					boost::asio::placeholders::error));
+   }
 
-  clients.push_back(client_socket);
+   void handle_accept(tcp_connection::pointer new_connection,
+		      const boost::system::error_code& error)
+   {
+     if (!error)
+       {
+	 new_connection->start();
+       }
 
-  return 0;
-}
+     start_accept();
+   }
+ }
